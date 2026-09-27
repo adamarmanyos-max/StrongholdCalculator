@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "strongholdfinder",
+  "version": "${version}",
+  "name": "Stronghold Finder",
+  "description": "Client-side Eye of Ender triangulation overlay for Minecraft 1.16.1.",
+  "authors": ["Adam Armanyos"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.adamarmanyos.stronghold.StrongholdFinderClient"
+    ]
+  },
+  "mixins": [
+    "strongholdfinder.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "minecraft": "1.16.1"
+  }
+}
