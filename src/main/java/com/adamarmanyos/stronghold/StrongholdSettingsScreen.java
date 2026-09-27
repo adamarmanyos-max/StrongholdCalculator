@@ -12,7 +12,7 @@ import net.minecraft.client.util.math.MatrixStack;
 public class StrongholdSettingsScreen
 extends Screen {
     private static final int PANEL_WIDTH = 220;
-    private static final int PANEL_HEIGHT = 298;
+    private static final int PANEL_HEIGHT = 326;
     private static final int SLIDER_WIDTH = 180;
     private static final int SLIDER_HEIGHT = 16;
     private static final int KNOB_WIDTH = 8;
@@ -34,6 +34,7 @@ extends Screen {
     private int calibrationY;
     private int practiceY;
     private int boatY;
+    private int boatSigmaY;
     private int trainerRowY;
     private int dragging = -1;
 
@@ -43,7 +44,7 @@ extends Screen {
 
     protected void init() {
         this.panelLeft = (this.width - 220) / 2;
-        this.panelTop = (this.height - 298) / 2;
+        this.panelTop = (this.height - 326) / 2;
         this.sizeSliderY = this.panelTop + 38;
         this.opacitySliderY = this.panelTop + 74;
         this.sigmaSliderY = this.panelTop + 110;
@@ -51,7 +52,8 @@ extends Screen {
         this.calibrationY = this.panelTop + 168;
         this.practiceY = this.panelTop + 196;
         this.boatY = this.panelTop + 224;
-        this.trainerRowY = this.panelTop + 252;
+        this.boatSigmaY = this.panelTop + 252;
+        this.trainerRowY = this.panelTop + 280;
     }
 
     public boolean isPauseScreen() {
@@ -63,7 +65,7 @@ extends Screen {
         int left = this.panelLeft;
         int top = this.panelTop;
         int right = left + 220;
-        int bottom = top + 298;
+        int bottom = top + 326;
         StrongholdSettingsScreen.roundedRect(matrices, left, top, right, bottom, -12959929);
         StrongholdSettingsScreen.roundedRect(matrices, left + 1, top + 1, right - 1, bottom - 1, -400810204);
         StrongholdSettingsScreen.roundedTop(matrices, left + 1, top + 1, right - 1, top + 20, -13881032);
@@ -75,7 +77,8 @@ extends Screen {
         int samples = StrongholdConfig.calibrationThrows();
         this.drawToggle(matrices, "Calibration", (String)(samples == 0 ? "none - press K" : samples + " throws (reset)"), this.calibrationY);
         this.drawToggle(matrices, "Blind practice", "start (needs cheats)", this.practiceY);
-        this.drawToggle(matrices, "Boat eye (pixel perfect)", StrongholdConfig.boatEye() ? "on" : "off", this.boatY);
+        this.drawToggle(matrices, "Boat eye (one eye)", StrongholdConfig.boatEye() ? "on" : "off", this.boatY);
+        this.drawToggle(matrices, "Boat eye aim error", String.format("%.4f deg", StrongholdConfig.boatEyeSigma()), this.boatSigmaY);
         this.drawToggle(matrices, "Measuring trainer", StrongholdConfig.measuringTrainer() ? "on" : "off", this.trainerRowY);
         this.centeredText(matrices, "Esc to close", left + 110, bottom - 14, -7695716);
         super.render(matrices, mouseX, mouseY, delta);
@@ -203,6 +206,10 @@ extends Screen {
         }
         if (this.isOnRow(mouseX, mouseY, this.boatY)) {
             StrongholdConfig.setBoatEye(!StrongholdConfig.boatEye());
+            return true;
+        }
+        if (this.isOnRow(mouseX, mouseY, this.boatSigmaY)) {
+            StrongholdConfig.cycleBoatEyeSigma();
             return true;
         }
         if (this.isOnRow(mouseX, mouseY, this.trainerRowY)) {

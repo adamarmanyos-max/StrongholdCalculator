@@ -22,7 +22,14 @@ public final class StrongholdConfig {
     private static int sigmaHundredths = 6;
     private static boolean trackEyeFlight;
     private static boolean boatEye;
-    private static int boatEyeSigmaThousandths;
+    /**
+     * Aim error assumed for a boat-eye throw, in ten-thousandths of a degree.
+     * Ninjabrain Bot's default is 0.001 deg. It used to be thousandths with a
+     * default of 0.01, which also applied to throws made without zooming in -
+     * ten times too trusting for those, and not adjustable anywhere.
+     */
+    public static final int[] BOAT_SIGMA_STEPS = new int[]{5, 10, 15, 20, 30, 50};
+    private static int boatEyeSigmaTenThousandths;
     private static int tallWidth;
     private static int tallHeight;
     private static boolean measuringTrainer;
@@ -106,7 +113,21 @@ public final class StrongholdConfig {
 
     public static double boatEyeSigma() {
         StrongholdConfig.ensureLoaded();
-        return (double)boatEyeSigmaThousandths / 1000.0;
+        return (double)boatEyeSigmaTenThousandths / 10000.0;
+    }
+
+    /** Steps to the next preset boat-eye aim error, wrapping round. */
+    public static double cycleBoatEyeSigma() {
+        StrongholdConfig.ensureLoaded();
+        int next = BOAT_SIGMA_STEPS[0];
+        for (int i = 0; i < BOAT_SIGMA_STEPS.length; ++i) {
+            if (BOAT_SIGMA_STEPS[i] != boatEyeSigmaTenThousandths) continue;
+            next = BOAT_SIGMA_STEPS[(i + 1) % BOAT_SIGMA_STEPS.length];
+            break;
+        }
+        boatEyeSigmaTenThousandths = next;
+        StrongholdConfig.save();
+        return StrongholdConfig.boatEyeSigma();
     }
 
     public static int tallWidth() {
@@ -287,8 +308,8 @@ public final class StrongholdConfig {
                         tallHeight = Math.max(240, Integer.parseInt(value));
                         continue;
                     }
-                    if ("boatsigma".equals(key)) {
-                        boatEyeSigmaThousandths = Integer.parseInt(value);
+                    if ("boatsigma_e4".equals(key)) {
+                        boatEyeSigmaTenThousandths = Math.max(1, Math.min(1000, Integer.parseInt(value)));
                         continue;
                     }
                     if ("trainer".equals(key)) {
@@ -314,7 +335,7 @@ public final class StrongholdConfig {
             calibrationSumOfSquares = 0.0;
             calibrationThrows = 0;
             boatEye = true;
-            boatEyeSigmaThousandths = 10;
+            boatEyeSigmaTenThousandths = 10;
             tallWidth = 512;
             tallHeight = 4096;
             measuringTrainer = false;
@@ -339,7 +360,7 @@ public final class StrongholdConfig {
                 writer.newLine();
                 writer.write("boat=" + boatEye);
                 writer.newLine();
-                writer.write("boatsigma=" + boatEyeSigmaThousandths);
+                writer.write("boatsigma_e4=" + boatEyeSigmaTenThousandths);
                 writer.newLine();
                 writer.write("tallwidth=" + tallWidth);
                 writer.newLine();
@@ -396,7 +417,7 @@ public final class StrongholdConfig {
 
     static {
         boatEye = true;
-        boatEyeSigmaThousandths = 10;
+        boatEyeSigmaTenThousandths = 10;
         tallWidth = 512;
         tallHeight = 4096;
         opacityPercent = 100;

@@ -1,5 +1,7 @@
-name: Build
+name: Build mod
 
+# GitHub's runners can reach maven.fabricmc.net and Mojang's hosts, so this is
+# where the mod gets compiled. Every push attaches the jar to the run.
 on:
   push:
   pull_request:
@@ -8,16 +10,35 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
-      - uses: gradle/actions/setup-gradle@v3
-      - run: chmod +x gradlew && ./gradlew build --stacktrace
-      - uses: actions/upload-artifact@v4
+          java-version: '17'
+          cache: gradle
+
+      # Errors are echoed again at the very end: Gradle prints them before a
+      # stack trace hundreds of lines long, which pushes them out of a log tail.
+      - name: Build
+        run: |
+          set -o pipefail
+          chmod +x gradlew
+          ./gradlew build --stacktrace --no-daemon 2>&1 | tee /tmp/build.log || {
+            echo ""
+            echo "================ COMPILE ERRORS ================"
+            grep -E "error:|warning:|\.java:[0-9]+|What went wrong" -A 3 /tmp/build.log | head -80
+            exit 1
+          }
+
+      - name: Upload jar
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: mod-jar
+          name: stronghold-finder
           path: build/libs/*.jar
-          if-no-files-found: error
+          if-no-files-found: warn

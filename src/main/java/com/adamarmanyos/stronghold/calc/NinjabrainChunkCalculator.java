@@ -399,7 +399,7 @@ implements StrongholdCalculator {
                 if (Math.abs(other[0] - chunk[0]) > 1 || Math.abs(other[1] - chunk[1]) > 1) continue;
                 taken[i] = true;
             }
-            predictions.add(new StrongholdPrediction(chunk[0] * 16 + 4, chunk[1] * 16 + 4, 0.0, 0.0, bestWeight));
+            predictions.add(new StrongholdPrediction(chunk[0], chunk[1], bestWeight));
         }
         if (predictions.isEmpty()) {
             return Collections.emptyList();

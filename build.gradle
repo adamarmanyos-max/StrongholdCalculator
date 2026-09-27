@@ -13,6 +13,10 @@ dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // No fabric-api, and no compile dependency on Toolscreen Mobile either:
+    // ToolscreenBridge reaches its API by reflection, so this jar works with
+    // or without it installed.
 }
 
 processResources {
@@ -22,11 +26,15 @@ processResources {
     }
 }
 
-tasks.withType(JavaCompile).configureEach {
-    it.options.release = 17
+// Amethyst runs 1.16.1 under Java 17, so target 17 rather than the Java 8 a
+// 1.16.1 mod would normally use.
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 17
+    it.options.encoding = "UTF-8"
 }

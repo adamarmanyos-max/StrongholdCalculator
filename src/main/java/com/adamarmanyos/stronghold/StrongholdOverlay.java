@@ -1,11 +1,5 @@
 package com.adamarmanyos.stronghold;
 
-import com.adamarmanyos.stronghold.BlindPractice;
-import com.adamarmanyos.stronghold.EyeTracker;
-import com.adamarmanyos.stronghold.PixelPerfect;
-import com.adamarmanyos.stronghold.StrongholdConfig;
-import com.adamarmanyos.stronghold.StrongholdSettingsScreen;
-import com.adamarmanyos.stronghold.TallScreen;
 import com.adamarmanyos.stronghold.calc.EyeMeasurement;
 import com.adamarmanyos.stronghold.calc.NinjabrainChunkCalculator;
 import com.adamarmanyos.stronghold.calc.StrongholdCalculator;
@@ -13,12 +7,11 @@ import com.adamarmanyos.stronghold.calc.StrongholdPrediction;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.options.GameOptions;
 import net.minecraft.client.gui.DrawableHelper;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.options.GameOptions;
+import net.minecraft.client.util.InputUtil;
+import net.minecraft.client.util.math.MatrixStack;
 
 public final class StrongholdOverlay {
     private static final int KEY_MODIFIER = 292;
@@ -31,16 +24,16 @@ public final class StrongholdOverlay {
     private static final int KEY_TALL_SCREEN = 265;
     private static final int KEY_PIXEL_MINUS = 263;
     private static final int KEY_PIXEL_PLUS = 262;
-    private static final double MEASURE_FOV = 30.0;
-    private static final double MEASURE_SENSITIVITY = 0.0;
-    private static final double TRAVEL_FOV = 110.0;
-    private static final double TRAVEL_SENSITIVITY = 0.4;
-    private static final double MEASURE_SENSITIVITY_THRESHOLD = 0.25;
     private static final int KEY_RESET = 66;
     private static final int KEY_FADE = 91;
     private static final int KEY_BRIGHTEN = 93;
     private static final int KEY_SMALLER = 45;
     private static final int KEY_LARGER = 61;
+    private static final double MEASURE_FOV = 30.0;
+    private static final double MEASURE_SENSITIVITY = 0.0;
+    private static final double TRAVEL_FOV = 110.0;
+    private static final double TRAVEL_SENSITIVITY = 0.4;
+    private static final double MEASURE_SENSITIVITY_THRESHOLD = 0.25;
     private static final int PANEL_X = 4;
     private static final int PANEL_Y = 4;
     private static final int PANEL_WIDTH = 256;
@@ -55,29 +48,33 @@ public final class StrongholdOverlay {
     private static final int COL_THROW_Z_RIGHT = 146;
     private static final int COL_THROW_ANGLE_RIGHT = 198;
     private static final int COL_THROW_ERROR_RIGHT = 251;
-    private static final int PANEL_BACKGROUND = 1842980;
-    private static final int TITLE_BAR_BACKGROUND = 2896184;
-    private static final int SEPARATOR = 3817287;
-    private static final int COLOR_TITLE = 15790837;
-    private static final int COLOR_VERSION = 8028812;
-    private static final int COLOR_HEADER = 11845324;
-    private static final int COLOR_COORD = 9414856;
-    private static final int COLOR_NUMBER = 14212322;
-    private static final int COLOR_SECTION = 15790837;
-    private static final int COLOR_HIGH = 6014059;
-    private static final int COLOR_MEDIUM = 14723132;
-    private static final int COLOR_LOW = 12733002;
-    private static final int COLOR_NOTICE = 16765514;
-    private static final int COLOR_WARNING = 16743002;
+    private static final int PANEL_BACKGROUND = 0x1C1F24;
+    private static final int TITLE_BAR_BACKGROUND = 0x2C3138;
+    private static final int SEPARATOR = 0x3A3F47;
+    private static final int COLOR_TITLE = 0xF0F2F5;
+    private static final int COLOR_VERSION = 0x7A828C;
+    private static final int COLOR_HEADER = 0xB4BECC;
+    private static final int COLOR_COORD = 0x8FA8C8;
+    private static final int COLOR_NUMBER = 0xD8DDE2;
+    private static final int COLOR_HIGH = 0x5BC46B;
+    private static final int COLOR_MEDIUM = 0xE0A83C;
+    private static final int COLOR_LOW = 0xC24A4A;
+    private static final int COLOR_NOTICE = 0xFFD24A;
+    private static final int COLOR_WARNING = 0xFF7A5A;
     private static final double MIN_USEFUL_BASELINE = 100.0;
-    private static final double FIT_WARNING_RATIO = 2.0;
     private static final double PERCENT_HIGH = 50.0;
     private static final double PERCENT_MEDIUM = 5.0;
-    private static final double ERROR_GOOD = 0.01;
-    private static final double ERROR_FAIR = 0.05;
+    /** Above this, one throw is enough and the "walk and throw again" advice is hidden. */
+    private static final double CONFIDENT = 0.95;
+    /**
+     * A boat-eye throw is lined up to within about half a pixel, and judging
+     * the middle of the eye's sprite adds roughly as much again, so its error
+     * is never taken as less than this many pixels, whatever the setting says.
+     */
+    private static final double MIN_BOAT_SIGMA_PIXELS = 0.6;
     private static final long NOTICE_DURATION_MS = 3000L;
     private static final int MAX_MEASUREMENTS = 3;
-    private static final String VERSION = "v6.1.0";
+    private static final String VERSION = "v7.0.0";
     private static final StrongholdCalculator CALCULATOR = new NinjabrainChunkCalculator();
     private static final List<EyeMeasurement> MEASUREMENTS = new ArrayList<EyeMeasurement>();
     private static List<StrongholdPrediction> results;
@@ -104,19 +101,29 @@ public final class StrongholdOverlay {
     private StrongholdOverlay() {
     }
 
+    /** Once a frame, from GameRenderer.render - so it runs with the HUD hidden too. */
+    public static void frame(MinecraftClient client) {
+        if (client == null || client.player == null) {
+            return;
+        }
+        ToolscreenBridge.registerSidePanel(StrongholdOverlay::renderSidePanel);
+        EyeTracker.tick(client);
+        BlindPractice.tick(client);
+        StrongholdOverlay.pollKeys(client);
+    }
+
+    /** The normal HUD panel, top left. */
     public static void render(MatrixStack matrices) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.player == null) {
             return;
         }
-        EyeTracker.tick(client);
-        BlindPractice.tick(client);
-        StrongholdOverlay.pollKeys(client);
-        float scale = StrongholdConfig.scaleFactor();
-        if (scale == 1.0f) {
-            StrongholdOverlay.draw(client, matrices);
+        // In a Toolscreen mode the panel is drawn beside the strip instead: here
+        // it would land in the part of the tall render that is cropped away.
+        if (StrongholdOverlay.inSidePanel()) {
             return;
         }
+        float scale = StrongholdConfig.scaleFactor();
         matrices.push();
         matrices.scale(scale, scale, 1.0f);
         try {
@@ -127,8 +134,38 @@ public final class StrongholdOverlay {
         }
     }
 
+    private static boolean inSidePanel() {
+        return ToolscreenBridge.sidePanelRegistered() && ToolscreenBridge.isOverrideActive();
+    }
+
+    /**
+     * Draws the panel into Toolscreen Mobile's letterbox. {@code box} is
+     * {x, y, width, height} in real screen pixels.
+     */
+    private static void renderSidePanel(MatrixStack matrices, int[] box) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.player == null || !StrongholdOverlay.hasContent() && notice == null) {
+            return;
+        }
+        double scale = client.getWindow().getScaleFactor() * StrongholdConfig.scaleFactor();
+        double fitWidth = (double)box[2] / (double)(PANEL_X + PANEL_WIDTH + PANEL_X);
+        double fitHeight = (double)box[3] / (double)(PANEL_Y + StrongholdOverlay.panelHeight() + 4 + ROW_HEIGHT);
+        scale = Math.min(scale, Math.min(fitWidth, fitHeight));
+        if (scale <= 0.0) {
+            return;
+        }
+        matrices.push();
+        matrices.translate((double)box[0], (double)box[1], 0.0);
+        matrices.scale((float)scale, (float)scale, 1.0f);
+        try {
+            StrongholdOverlay.draw(client, matrices);
+        }
+        finally {
+            matrices.pop();
+        }
+    }
+
     private static void pollKeys(MinecraftClient client) {
-        boolean larger;
         if (client.currentScreen != null) {
             prevCapture = false;
             prevToggle = false;
@@ -147,23 +184,23 @@ public final class StrongholdOverlay {
             return;
         }
         long window = client.getWindow().getHandle();
-        boolean modifier = InputUtil.isKeyPressed((long)window, (int)292);
-        boolean capture = modifier && InputUtil.isKeyPressed((long)window, (int)67);
-        boolean toggle = !modifier && InputUtil.isKeyPressed((long)window, (int)78);
-        boolean settings = !modifier && InputUtil.isKeyPressed((long)window, (int)46);
-        boolean measureMode = !modifier && InputUtil.isKeyPressed((long)window, (int)77);
-        boolean calibrate = !modifier && InputUtil.isKeyPressed((long)window, (int)75);
-        boolean teleport = !modifier && InputUtil.isKeyPressed((long)window, (int)80);
-        boolean tallScreen = !modifier && InputUtil.isKeyPressed((long)window, (int)265);
-        boolean pixelMinus = !modifier && InputUtil.isKeyPressed((long)window, (int)263);
-        boolean pixelPlus = !modifier && InputUtil.isKeyPressed((long)window, (int)262);
-        boolean reset = !modifier && InputUtil.isKeyPressed((long)window, (int)66);
-        boolean fade = !modifier && InputUtil.isKeyPressed((long)window, (int)91);
-        boolean brighten = !modifier && InputUtil.isKeyPressed((long)window, (int)93);
-        boolean smaller = !modifier && InputUtil.isKeyPressed((long)window, (int)45);
-        boolean bl = larger = !modifier && InputUtil.isKeyPressed((long)window, (int)61);
+        boolean modifier = InputUtil.isKeyPressed(window, KEY_MODIFIER);
+        boolean capture = modifier && InputUtil.isKeyPressed(window, KEY_CAPTURE);
+        boolean toggle = !modifier && InputUtil.isKeyPressed(window, KEY_TOGGLE);
+        boolean settings = !modifier && InputUtil.isKeyPressed(window, KEY_SETTINGS);
+        boolean measureMode = !modifier && InputUtil.isKeyPressed(window, KEY_MEASURE_MODE);
+        boolean calibrate = !modifier && InputUtil.isKeyPressed(window, KEY_CALIBRATE);
+        boolean teleport = !modifier && InputUtil.isKeyPressed(window, KEY_TELEPORT);
+        boolean tallScreen = !modifier && InputUtil.isKeyPressed(window, KEY_TALL_SCREEN);
+        boolean pixelMinus = !modifier && InputUtil.isKeyPressed(window, KEY_PIXEL_MINUS);
+        boolean pixelPlus = !modifier && InputUtil.isKeyPressed(window, KEY_PIXEL_PLUS);
+        boolean reset = !modifier && InputUtil.isKeyPressed(window, KEY_RESET);
+        boolean fade = !modifier && InputUtil.isKeyPressed(window, KEY_FADE);
+        boolean brighten = !modifier && InputUtil.isKeyPressed(window, KEY_BRIGHTEN);
+        boolean smaller = !modifier && InputUtil.isKeyPressed(window, KEY_SMALLER);
+        boolean larger = !modifier && InputUtil.isKeyPressed(window, KEY_LARGER);
         if (capture && !prevCapture) {
-            StrongholdOverlay.capture(client.player);
+            StrongholdOverlay.capture(client, client.player);
         }
         if (toggle && !prevToggle) {
             hidden = !hidden;
@@ -185,10 +222,10 @@ public final class StrongholdOverlay {
             TallScreen.toggle(client);
         }
         if (pixelMinus && !prevPixelMinus) {
-            StrongholdOverlay.adjustLastAngle(client, -1);
+            StrongholdOverlay.adjustLastAngle(-1);
         }
         if (pixelPlus && !prevPixelPlus) {
-            StrongholdOverlay.adjustLastAngle(client, 1);
+            StrongholdOverlay.adjustLastAngle(1);
         }
         if (reset && !prevReset) {
             StrongholdOverlay.reset();
@@ -222,34 +259,41 @@ public final class StrongholdOverlay {
     }
 
     private static void toggleMeasureMode(MinecraftClient client) {
-        boolean measuring;
         GameOptions options = client.options;
         if (options == null) {
             return;
         }
-        boolean bl = measuring = options.mouseSensitivity <= 0.25;
+        boolean measuring = options.mouseSensitivity <= MEASURE_SENSITIVITY_THRESHOLD;
         if (measuring) {
-            options.fov = 110.0;
-            options.mouseSensitivity = 0.4;
+            options.fov = TRAVEL_FOV;
+            options.mouseSensitivity = TRAVEL_SENSITIVITY;
             StrongholdOverlay.showNotice("Travel: FOV 110, sens 80%");
         } else {
-            options.fov = 30.0;
-            options.mouseSensitivity = 0.0;
+            options.fov = MEASURE_FOV;
+            options.mouseSensitivity = MEASURE_SENSITIVITY;
             StrongholdOverlay.showNotice("Measure: FOV 30, slow mouse");
         }
         options.write();
     }
 
-    private static void adjustLastAngle(MinecraftClient client, int increments) {
+    /**
+     * Moves the last throw's angle by whole pixels, for an eye that is not
+     * exactly under the crosshair: if it sits 3 ruler cells right of the
+     * centre line, press the right arrow 3 times.
+     */
+    private static void adjustLastAngle(int increments) {
         if (MEASUREMENTS.isEmpty()) {
             StrongholdOverlay.showNotice("No throw to adjust");
             return;
         }
         EyeMeasurement last = MEASUREMENTS.get(MEASUREMENTS.size() - 1);
-        double perPixel = PixelPerfect.degreesPerPixel(client, last.pitch);
-        last.yaw = (float)((double)last.yaw + (double)increments * perPixel);
+        if (last.fromEyeFlight) {
+            StrongholdOverlay.showNotice("Tracked throws need no adjusting");
+            return;
+        }
+        last.yaw = (float)((double)last.yaw + (double)increments * last.yawPerPixel);
         last.pixelAdjustments += increments;
-        StrongholdOverlay.showNotice("Angle " + (last.pixelAdjustments >= 0 ? "+" : "") + last.pixelAdjustments + " px (" + StrongholdOverlay.decimals(perPixel * (double)last.pixelAdjustments, 4) + " deg)");
+        StrongholdOverlay.showNotice("Angle " + StrongholdOverlay.signed(last.pixelAdjustments) + " px (" + StrongholdOverlay.decimals(last.yawPerPixel * (double)last.pixelAdjustments, 4) + " deg)");
         StrongholdOverlay.calculate();
     }
 
@@ -263,11 +307,11 @@ public final class StrongholdOverlay {
             return;
         }
         StrongholdPrediction best = results.get(0);
-        String command = "/tp @s " + best.overworldX + " " + Math.round(player.getY()) + " " + best.overworldZ;
-        player.sendChatMessage(command);
+        player.sendChatMessage("/tp @s " + best.overworldX + " " + Math.round(player.getY()) + " " + best.overworldZ);
         StrongholdOverlay.showNotice("Teleporting to " + best.overworldX + ", " + best.overworldZ);
     }
 
+    /** Stand in the stronghold's chunk and press K: each throw's error trains the aim error setting. */
     private static void calibrateHere(ClientPlayerEntity player) {
         if (MEASUREMENTS.isEmpty()) {
             StrongholdOverlay.showNotice("No throws to calibrate from");
@@ -275,44 +319,65 @@ public final class StrongholdOverlay {
         }
         int chunkX = Math.floorDiv((int)Math.floor(player.getX()), 16);
         int chunkZ = Math.floorDiv((int)Math.floor(player.getZ()), 16);
-        double targetX = chunkX * 16 + 8;
-        double targetZ = chunkZ * 16 + 8;
-        double[] errors = new double[MEASUREMENTS.size()];
-        for (int i = 0; i < MEASUREMENTS.size(); ++i) {
-            EyeMeasurement measurement = MEASUREMENTS.get(i);
+        double targetX = chunkX * 16 + StrongholdPrediction.EYE_TARGET_IN_CHUNK;
+        double targetZ = chunkZ * 16 + StrongholdPrediction.EYE_TARGET_IN_CHUNK;
+        List<Double> errors = new ArrayList<Double>();
+        for (EyeMeasurement measurement : MEASUREMENTS) {
+            // Boat-eye and tracked throws have their own error; mixing them in
+            // would drag the normal aim error down.
+            if (measurement.fromBoat || measurement.fromEyeFlight) continue;
             double predicted = Math.toDegrees(Math.atan2(-(targetX - measurement.x), targetZ - measurement.z));
-            errors[i] = StrongholdOverlay.wrapYaw(predicted - (double)measurement.yaw);
+            errors.add(StrongholdOverlay.wrapYaw(predicted - (double)measurement.yaw));
         }
-        double sigma = StrongholdConfig.addCalibrationErrors(errors);
+        if (errors.isEmpty()) {
+            StrongholdOverlay.showNotice("Only boat eye throws - nothing to calibrate");
+            return;
+        }
+        double[] values = new double[errors.size()];
+        for (int i = 0; i < values.length; ++i) {
+            values[i] = errors.get(i);
+        }
+        double sigma = StrongholdConfig.addCalibrationErrors(values);
         if (sigma < 0.0) {
             StrongholdOverlay.showNotice("Calibration failed");
             return;
         }
-        StrongholdOverlay.showNotice("Calibrated: sigma " + StrongholdOverlay.decimals(sigma, 2) + " from " + StrongholdConfig.calibrationThrows() + " throws");
+        StrongholdOverlay.showNotice("Calibrated: aim error " + StrongholdOverlay.decimals(sigma, 2) + " from " + StrongholdConfig.calibrationThrows() + " throws");
     }
 
-    private static void capture(ClientPlayerEntity player) {
-        String detail;
-        EyeMeasurement measurement;
+    private static void capture(MinecraftClient client, ClientPlayerEntity player) {
         boolean useTracking = StrongholdConfig.trackEyeFlight();
         if (useTracking && EyeTracker.hasBearing() && EyeTracker.isCaptured()) {
             StrongholdOverlay.showNotice("That eye is already added");
             return;
         }
-        MinecraftClient client = MinecraftClient.getInstance();
+        float yaw = (float)((double)player.yaw - PixelPerfect.packetRoundingCorrection(player.yaw));
+        double yawPerPixel = PixelPerfect.yawDegreesPerPixel(client, player.pitch);
+        EyeMeasurement measurement;
+        String detail;
         if (useTracking && EyeTracker.hasBearing()) {
-            measurement = new EyeMeasurement(EyeTracker.originX(), EyeTracker.originZ(), (float)EyeTracker.bearingDegrees(), 0.005, true);
-        } else if (StrongholdConfig.boatEye()) {
-            measurement = new EyeMeasurement(player.getX(), player.getZ(), (float)((double)player.yaw - PixelPerfect.packetRoundingCorrection(player.yaw)), StrongholdConfig.boatEyeSigma(), false);
+            measurement = new EyeMeasurement(EyeTracker.originX(), EyeTracker.originZ(), (float)EyeTracker.bearingDegrees(), EyeTracker.TRACKED_SIGMA, true);
+            detail = " tracked over " + StrongholdOverlay.decimals(EyeTracker.travelled(), 0) + " blocks";
+        } else if (StrongholdConfig.boatEye() && PixelPerfect.zoomedForBoatEye(client)) {
+            // Boat eye. Ninjabrain Bot needs the boat to recover the angle
+            // decimals F3+C leaves out; this mod reads the exact angle from the
+            // game, so the precision here comes from lining the eye up to the
+            // pixel on a magnified view, then correcting with the arrow keys.
+            double sigma = Math.max(StrongholdConfig.boatEyeSigma(), MIN_BOAT_SIGMA_PIXELS * yawPerPixel);
+            measurement = new EyeMeasurement(player.getX(), player.getZ(), yaw, sigma, false);
             measurement.fromBoat = true;
+            detail = " boat eye - count the ruler cells, arrows to correct";
         } else {
-            measurement = new EyeMeasurement(player.getX(), player.getZ(), (float)((double)player.yaw - PixelPerfect.packetRoundingCorrection(player.yaw)), StrongholdConfig.angleSigma(), false);
+            measurement = new EyeMeasurement(player.getX(), player.getZ(), yaw, StrongholdConfig.angleSigma(), false);
+            detail = StrongholdConfig.boatEye()
+                    ? " not zoomed in - normal aim error (up arrow: Eye Measure)"
+                    : " from crosshair";
         }
         measurement.pitch = player.pitch;
-        String string = detail = measurement.fromEyeFlight ? " tracked over " + StrongholdOverlay.decimals(EyeTracker.travelled(), 0) + " blocks" : " from crosshair - less accurate";
+        measurement.yawPerPixel = yawPerPixel;
         if (StrongholdConfig.measuringTrainer() && EyeTracker.hasBearing()) {
             double error = StrongholdOverlay.wrapYaw((double)measurement.yaw - EyeTracker.bearingDegrees());
-            boatScore = "Last throw off by " + StrongholdOverlay.decimals(Math.abs(error), 4) + " deg";
+            boatScore = "Last throw off by " + StrongholdOverlay.decimals(Math.abs(error), 4) + " deg (" + StrongholdOverlay.decimals(error / yawPerPixel, 1) + " px)";
         }
         EyeTracker.markCaptured();
         StrongholdOverlay.record(measurement, detail);
@@ -321,11 +386,11 @@ public final class StrongholdOverlay {
     private static void record(EyeMeasurement measurement, String detail) {
         MEASUREMENTS.add(measurement);
         hidden = false;
-        StrongholdOverlay.showNotice("Eye " + MEASUREMENTS.size() + detail);
-        while (MEASUREMENTS.size() > 3) {
+        while (MEASUREMENTS.size() > MAX_MEASUREMENTS) {
             MEASUREMENTS.remove(0);
         }
         StrongholdOverlay.calculate();
+        StrongholdOverlay.showNotice("Eye " + MEASUREMENTS.size() + detail);
     }
 
     private static void calculate() {
@@ -350,6 +415,7 @@ public final class StrongholdOverlay {
         results = null;
         advice = null;
         notice = null;
+        boatScore = null;
         hidden = false;
         EyeTracker.forget();
     }
@@ -360,12 +426,15 @@ public final class StrongholdOverlay {
 
     private static void showNotice(String text) {
         notice = text;
-        noticeExpiresAt = System.currentTimeMillis() + 3000L;
+        noticeExpiresAt = System.currentTimeMillis() + NOTICE_DURATION_MS;
+    }
+
+    private static boolean hasContent() {
+        return !hidden && (!MEASUREMENTS.isEmpty() || StrongholdConfig.trackEyeFlight() && EyeTracker.isReady() || results != null && !results.isEmpty());
     }
 
     private static void draw(MinecraftClient client, MatrixStack matrices) {
-        boolean hasContent;
-        boolean bl = hasContent = !hidden && (!MEASUREMENTS.isEmpty() || StrongholdConfig.trackEyeFlight() && EyeTracker.isReady() || results != null && !results.isEmpty());
+        boolean hasContent = StrongholdOverlay.hasContent();
         if (hasContent) {
             StrongholdOverlay.drawPanel(client, matrices);
         }
@@ -373,8 +442,8 @@ public final class StrongholdOverlay {
             if (System.currentTimeMillis() > noticeExpiresAt) {
                 notice = null;
             } else {
-                int y = hasContent ? 4 + StrongholdOverlay.panelHeight() + 4 : 4;
-                StrongholdOverlay.text(client, matrices, notice, 9, y, 16765514);
+                int y = hasContent ? PANEL_Y + StrongholdOverlay.panelHeight() + 4 : PANEL_Y;
+                StrongholdOverlay.text(client, matrices, notice, PANEL_X + PADDING, y, COLOR_NOTICE);
             }
         }
     }
@@ -392,37 +461,43 @@ public final class StrongholdOverlay {
     }
 
     private static int candidateRows() {
-        if (results == null || MEASUREMENTS.size() < 2) {
-            return 0;
+        return results == null ? 0 : results.size();
+    }
+
+    /**
+     * Whether to show "walk and throw again". Only while one throw is not
+     * enough - a good boat eye throw usually is, and then it is just noise.
+     */
+    private static boolean showAdvice() {
+        if (advice == null || MEASUREMENTS.size() != 1) {
+            return false;
         }
-        return results.size();
+        return results == null || results.isEmpty() || !results.get(0).hasCertainty() || results.get(0).certainty < CONFIDENT;
+    }
+
+    private static int trainerLines() {
+        int lines = 3;
+        if (!MEASUREMENTS.isEmpty()) {
+            ++lines;
+        }
+        if (boatScore != null) {
+            ++lines;
+        }
+        return lines;
     }
 
     private static int panelHeight() {
-        int height = 14;
+        int height = TITLE_BAR_HEIGHT;
         if (StrongholdOverlay.candidateRows() > 0) {
-            height += 3;
-            height += 11;
-            height += StrongholdOverlay.candidateRows() * 11;
-            height += 4;
+            height += 3 + ROW_HEIGHT + StrongholdOverlay.candidateRows() * ROW_HEIGHT + 4;
         }
-        ++height;
-        height += 3;
-        height += 11;
-        height += 11;
-        height += MEASUREMENTS.size() * 11;
-        if (advice != null && MEASUREMENTS.size() < 2) {
-            height += 11 * StrongholdOverlay.adviceLineCount() + 2;
+        height += 1 + 3 + ROW_HEIGHT + ROW_HEIGHT;
+        height += MEASUREMENTS.size() * ROW_HEIGHT;
+        if (StrongholdOverlay.showAdvice()) {
+            height += ROW_HEIGHT * StrongholdOverlay.adviceLineCount() + 2;
         }
         if (StrongholdConfig.measuringTrainer()) {
-            int lines = 3;
-            if (!MEASUREMENTS.isEmpty()) {
-                ++lines;
-            }
-            if (boatScore != null) {
-                ++lines;
-            }
-            height += 11 * lines + 2;
+            height += ROW_HEIGHT * StrongholdOverlay.trainerLines() + 2;
         }
         if (StrongholdConfig.trackEyeFlight() && EyeTracker.isReady()) {
             height += 13;
@@ -430,126 +505,138 @@ public final class StrongholdOverlay {
         if (StrongholdOverlay.warning() != null) {
             height += 13;
         }
-        return height += 5;
+        return height + PADDING;
     }
 
     private static void drawPanel(MinecraftClient client, MatrixStack matrices) {
-        String warning;
-        int left = 4;
-        int top = 4;
-        int right = left + 256;
+        int left = PANEL_X;
+        int top = PANEL_Y;
+        int right = left + PANEL_WIDTH;
         int bottom = top + StrongholdOverlay.panelHeight();
-        StrongholdOverlay.roundedRect(matrices, left, top, right, bottom, 1842980);
-        StrongholdOverlay.roundedTop(matrices, left, top, right, top + 14, 2896184);
+        StrongholdOverlay.roundedRect(matrices, left, top, right, bottom, PANEL_BACKGROUND);
+        StrongholdOverlay.roundedTop(matrices, left, top, right, top + TITLE_BAR_HEIGHT, TITLE_BAR_BACKGROUND);
         int y = top + 3;
-        StrongholdOverlay.text(client, matrices, "Stronghold Finder", left + 5, y, 15790837);
+        StrongholdOverlay.text(client, matrices, "Stronghold Finder", left + PADDING, y, COLOR_TITLE);
         int titleWidth = client.textRenderer.getWidth("Stronghold Finder");
-        StrongholdOverlay.text(client, matrices, VERSION, left + 5 + titleWidth + 4, y, 8028812);
-        y = top + 14;
+        StrongholdOverlay.text(client, matrices, VERSION, left + PADDING + titleWidth + 4, y, COLOR_VERSION);
+        y = top + TITLE_BAR_HEIGHT;
         if (StrongholdOverlay.candidateRows() > 0) {
-            StrongholdOverlay.centred(client, matrices, "Overworld", left + 43, y += 3, 11845324);
-            StrongholdOverlay.rightAligned(client, matrices, "%", left + 119, y, 11845324);
-            StrongholdOverlay.rightAligned(client, matrices, "Dist.", left + 155, y, 11845324);
-            StrongholdOverlay.centred(client, matrices, "Nether", left + 199, y, 11845324);
-            y += 11;
-            for (int i = 0; i < results.size(); ++i) {
-                StrongholdPrediction candidate = results.get(i);
+            y += 3;
+            StrongholdOverlay.centred(client, matrices, "Overworld", left + COL_COORD_CENTRE, y, COLOR_HEADER);
+            StrongholdOverlay.rightAligned(client, matrices, "%", left + COL_PERCENT_RIGHT, y, COLOR_HEADER);
+            StrongholdOverlay.rightAligned(client, matrices, "Dist.", left + COL_DIST_RIGHT, y, COLOR_HEADER);
+            StrongholdOverlay.centred(client, matrices, "Nether", left + COL_NETHER_CENTRE, y, COLOR_HEADER);
+            y += ROW_HEIGHT;
+            for (StrongholdPrediction candidate : results) {
                 String overworld = "(" + candidate.overworldX + ", " + candidate.overworldZ + ")";
                 String nether = "(" + candidate.netherX() + ", " + candidate.netherZ() + ")";
                 double dx = (double)candidate.overworldX - client.player.getX();
                 double dz = (double)candidate.overworldZ - client.player.getZ();
                 long distance = Math.round(Math.sqrt(dx * dx + dz * dz));
-                StrongholdOverlay.centred(client, matrices, overworld, left + 43, y, 9414856);
+                StrongholdOverlay.centred(client, matrices, overworld, left + COL_COORD_CENTRE, y, COLOR_COORD);
                 if (candidate.hasCertainty()) {
                     double percent = candidate.certainty * 100.0;
-                    StrongholdOverlay.rightAligned(client, matrices, StrongholdOverlay.decimals(percent, 1) + "%", left + 119, y, StrongholdOverlay.percentColor(percent));
+                    StrongholdOverlay.rightAligned(client, matrices, StrongholdOverlay.decimals(percent, 1) + "%", left + COL_PERCENT_RIGHT, y, StrongholdOverlay.percentColor(percent));
                 } else {
-                    StrongholdOverlay.rightAligned(client, matrices, "-", left + 119, y, 14212322);
+                    StrongholdOverlay.rightAligned(client, matrices, "-", left + COL_PERCENT_RIGHT, y, COLOR_NUMBER);
                 }
-                StrongholdOverlay.rightAligned(client, matrices, Long.toString(distance), left + 155, y, 14212322);
-                StrongholdOverlay.centred(client, matrices, nether, left + 199, y, 9414856);
-                y += 11;
+                StrongholdOverlay.rightAligned(client, matrices, Long.toString(distance), left + COL_DIST_RIGHT, y, COLOR_NUMBER);
+                StrongholdOverlay.centred(client, matrices, nether, left + COL_NETHER_CENTRE, y, COLOR_COORD);
+                y += ROW_HEIGHT;
             }
             y += 4;
         }
-        StrongholdOverlay.fill(matrices, left + 5, y, right - 5, y + 1, 3817287);
-        StrongholdOverlay.text(client, matrices, "Ender eye throws", left + 5, y += 4, 15790837);
-        StrongholdOverlay.text(client, matrices, "Src", left + 5, y += 11, 11845324);
-        StrongholdOverlay.rightAligned(client, matrices, "x", left + 84, y, 11845324);
-        StrongholdOverlay.rightAligned(client, matrices, "z", left + 146, y, 11845324);
-        StrongholdOverlay.rightAligned(client, matrices, "Angle", left + 198, y, 11845324);
-        StrongholdOverlay.rightAligned(client, matrices, "Error", left + 251, y, 11845324);
-        y += 11;
+        StrongholdOverlay.fill(matrices, left + PADDING, y, right - PADDING, y + 1, SEPARATOR);
+        y += 4;
+        StrongholdOverlay.text(client, matrices, "Ender eye throws", left + PADDING, y, COLOR_TITLE);
+        y += ROW_HEIGHT;
+        StrongholdOverlay.text(client, matrices, "Src", left + PADDING, y, COLOR_HEADER);
+        StrongholdOverlay.rightAligned(client, matrices, "x", left + COL_THROW_X_RIGHT, y, COLOR_HEADER);
+        StrongholdOverlay.rightAligned(client, matrices, "z", left + COL_THROW_Z_RIGHT, y, COLOR_HEADER);
+        StrongholdOverlay.rightAligned(client, matrices, "Angle", left + COL_THROW_ANGLE_RIGHT, y, COLOR_HEADER);
+        StrongholdOverlay.rightAligned(client, matrices, "Error", left + COL_THROW_ERROR_RIGHT, y, COLOR_HEADER);
+        y += ROW_HEIGHT;
         StrongholdPrediction best = results == null || results.isEmpty() ? null : results.get(0);
-        for (int i = 0; i < MEASUREMENTS.size(); ++i) {
-            String source;
-            EyeMeasurement measurement = MEASUREMENTS.get(i);
-            String string = measurement.fromEyeFlight ? "eye" : (source = measurement.fromBoat ? "boat" : "aim");
-            int sourceColor = measurement.fromEyeFlight ? 6014059 : (measurement.fromBoat ? 6014059 : 12733002);
-            StrongholdOverlay.text(client, matrices, source, left + 5, y, sourceColor);
-            StrongholdOverlay.rightAligned(client, matrices, StrongholdOverlay.decimals(measurement.x, 2), left + 84, y, 9414856);
-            StrongholdOverlay.rightAligned(client, matrices, StrongholdOverlay.decimals(measurement.z, 2), left + 146, y, 9414856);
-            StrongholdOverlay.rightAligned(client, matrices, StrongholdOverlay.decimals(StrongholdOverlay.wrapYaw(measurement.yaw), 2), left + 198, y, measurement.fromEyeFlight ? 6014059 : 14212322);
-            if (best == null || MEASUREMENTS.size() < 2) {
-                StrongholdOverlay.rightAligned(client, matrices, "-", left + 251, y, 14212322);
+        for (EyeMeasurement measurement : MEASUREMENTS) {
+            String source = measurement.fromEyeFlight ? "eye" : (measurement.fromBoat ? "boat" : "aim");
+            int sourceColor = measurement.fromEyeFlight || measurement.fromBoat ? COLOR_HIGH : COLOR_LOW;
+            boolean precise = measurement.fromEyeFlight || measurement.fromBoat;
+            StrongholdOverlay.text(client, matrices, source, left + PADDING, y, sourceColor);
+            StrongholdOverlay.rightAligned(client, matrices, StrongholdOverlay.decimals(measurement.x, 2), left + COL_THROW_X_RIGHT, y, COLOR_COORD);
+            StrongholdOverlay.rightAligned(client, matrices, StrongholdOverlay.decimals(measurement.z, 2), left + COL_THROW_Z_RIGHT, y, COLOR_COORD);
+            StrongholdOverlay.rightAligned(client, matrices, StrongholdOverlay.decimals(StrongholdOverlay.wrapYaw(measurement.yaw), precise ? 3 : 2), left + COL_THROW_ANGLE_RIGHT, y, precise ? COLOR_HIGH : COLOR_NUMBER);
+            if (best == null) {
+                StrongholdOverlay.rightAligned(client, matrices, "-", left + COL_THROW_ERROR_RIGHT, y, COLOR_NUMBER);
             } else {
                 double error = StrongholdOverlay.angleError(measurement, best);
-                StrongholdOverlay.rightAligned(client, matrices, StrongholdOverlay.decimals(error, 3), left + 251, y, StrongholdOverlay.errorColor(error));
+                StrongholdOverlay.rightAligned(client, matrices, StrongholdOverlay.decimals(error, precise ? 4 : 3), left + COL_THROW_ERROR_RIGHT, y, StrongholdOverlay.errorColor(error, measurement.sigma));
             }
-            y += 11;
+            y += ROW_HEIGHT;
         }
-        if (advice != null && MEASUREMENTS.size() < 2) {
+        if (StrongholdOverlay.showAdvice()) {
             y += 2;
             for (String line : advice.split("\n")) {
-                StrongholdOverlay.text(client, matrices, line, left + 5, y, 11845324);
-                y += 11;
+                StrongholdOverlay.text(client, matrices, line, left + PADDING, y, COLOR_HEADER);
+                y += ROW_HEIGHT;
             }
         }
         if (StrongholdConfig.measuringTrainer()) {
-            boolean fovOk = PixelPerfect.atMeasuringFov(client);
-            double perPixel = PixelPerfect.degreesPerPixel(client, client.player.pitch);
+            y += 2;
+            double perPixel = PixelPerfect.degreesPerPixel(client);
+            boolean zoomed = PixelPerfect.zoomedForBoatEye(client);
             boolean corner = PixelPerfect.isOnCorner(client.player.getX(), client.player.getZ());
-            StrongholdOverlay.text(client, matrices, "FOV " + Math.round(client.options.fov) + (fovOk ? " ok" : " - press M, pixel maths needs 30") + "   " + StrongholdOverlay.decimals(perPixel, 4) + " deg/px", left + 5, y += 2, fovOk ? 11845324 : 12733002);
-            int screenHeight = client.getWindow().getHeight();
-            boolean tallEnough = screenHeight >= 3071;
-            StrongholdOverlay.text(client, matrices, "Screen " + client.getWindow().getWidth() + "x" + screenHeight + (tallEnough ? "  pixel beats 0.01" : "  too short (up arrow)"), left + 5, y += 11, tallEnough ? 6014059 : 14723132);
-            StrongholdOverlay.text(client, matrices, corner ? "On a block corner - position is exact" : "Not on a corner - stand against a block", left + 5, y += 11, corner ? 6014059 : 14723132);
-            y += 11;
+            StrongholdOverlay.text(client, matrices, "FOV " + StrongholdOverlay.decimals(PixelPerfect.renderedFov(client), 1) + ", render " + client.getWindow().getFramebufferHeight() + " px tall", left + PADDING, y, COLOR_HEADER);
+            y += ROW_HEIGHT;
+            StrongholdOverlay.text(client, matrices, "1 px = " + StrongholdOverlay.decimals(perPixel, 5) + " deg" + (zoomed ? "  boat eye ready" : "  zoom in (up arrow)"), left + PADDING, y, zoomed ? COLOR_HIGH : COLOR_MEDIUM);
+            y += ROW_HEIGHT;
+            StrongholdOverlay.text(client, matrices, corner ? "On a block corner - position is exact" : "Not on a corner - stand against a block", left + PADDING, y, corner ? COLOR_HIGH : COLOR_MEDIUM);
+            y += ROW_HEIGHT;
             if (!MEASUREMENTS.isEmpty()) {
                 EyeMeasurement last = MEASUREMENTS.get(MEASUREMENTS.size() - 1);
-                StrongholdOverlay.text(client, matrices, "Last throw " + (last.pixelAdjustments >= 0 ? "+" : "") + last.pixelAdjustments + " px  (arrows adjust)", left + 5, y, 14212322);
-                y += 11;
+                StrongholdOverlay.text(client, matrices, "Last throw " + StrongholdOverlay.signed(last.pixelAdjustments) + " px  (arrows adjust)", left + PADDING, y, COLOR_NUMBER);
+                y += ROW_HEIGHT;
             }
             if (boatScore != null) {
-                StrongholdOverlay.text(client, matrices, boatScore, left + 5, y, 14212322);
-                y += 11;
+                StrongholdOverlay.text(client, matrices, boatScore, left + PADDING, y, COLOR_NUMBER);
+                y += ROW_HEIGHT;
             }
         }
-        if ((warning = StrongholdOverlay.warning()) != null) {
-            StrongholdOverlay.text(client, matrices, warning, left + 5, y += 2, 16743002);
+        if (StrongholdConfig.trackEyeFlight() && EyeTracker.isReady()) {
+            y += 2;
+            StrongholdOverlay.text(client, matrices, "Eye tracked - F3+C to add it", left + PADDING, y, COLOR_HIGH);
+            y += ROW_HEIGHT;
+        }
+        String warning = StrongholdOverlay.warning();
+        if (warning != null) {
+            y += 2;
+            StrongholdOverlay.text(client, matrices, warning, left + PADDING, y, COLOR_WARNING);
         }
     }
 
     private static String warning() {
-        if (MEASUREMENTS.size() < 2 || results == null || results.isEmpty()) {
+        if (MEASUREMENTS.isEmpty() || results == null || results.isEmpty()) {
             return null;
         }
-        double baseline = StrongholdOverlay.longestBaseline();
-        if (baseline < 100.0) {
-            return "Throws " + Math.round(baseline) + " blocks apart - move further";
-        }
         StrongholdPrediction best = results.get(0);
+        if (MEASUREMENTS.size() >= 2 && (!best.hasCertainty() || best.certainty < CONFIDENT)) {
+            double baseline = StrongholdOverlay.longestBaseline();
+            if (baseline < MIN_USEFUL_BASELINE) {
+                return "Throws " + Math.round(baseline) + " blocks apart - move further";
+            }
+        }
+        if (MEASUREMENTS.size() < 2) {
+            return null;
+        }
         double worst = 0.0;
         double chiSquare = 0.0;
-        for (int i = 0; i < MEASUREMENTS.size(); ++i) {
-            double error = StrongholdOverlay.angleError(MEASUREMENTS.get(i), best);
-            double scaled = error / StrongholdOverlay.MEASUREMENTS.get((int)i).sigma;
+        for (EyeMeasurement measurement : MEASUREMENTS) {
+            double error = StrongholdOverlay.angleError(measurement, best);
+            double scaled = error / measurement.sigma;
             chiSquare += scaled * scaled;
-            if (!(Math.abs(error) > worst)) continue;
-            worst = Math.abs(error);
+            worst = Math.max(worst, Math.abs(error));
         }
         if (chiSquare > 2.0 * (double)MEASUREMENTS.size()) {
-            return "Angles off by " + StrongholdOverlay.decimals(worst, 2) + " deg - retake";
+            return "Angles off by " + StrongholdOverlay.decimals(worst, 3) + " deg - retake";
         }
         return null;
     }
@@ -560,46 +647,42 @@ public final class StrongholdOverlay {
             for (int j = i + 1; j < MEASUREMENTS.size(); ++j) {
                 EyeMeasurement a = MEASUREMENTS.get(i);
                 EyeMeasurement b = MEASUREMENTS.get(j);
-                double distance = Math.hypot(a.x - b.x, a.z - b.z);
-                if (!(distance > longest)) continue;
-                longest = distance;
+                longest = Math.max(longest, Math.hypot(a.x - b.x, a.z - b.z));
             }
         }
         return longest;
     }
 
+    /** How far a throw's angle is from pointing at the prediction's eye target, (8, 8) in its chunk. */
     private static double angleError(EyeMeasurement measurement, StrongholdPrediction prediction) {
-        double predicted = Math.toDegrees(Math.atan2(-((double)prediction.overworldX - measurement.x), (double)prediction.overworldZ - measurement.z));
-        double difference = (predicted - (double)measurement.yaw + 180.0) % 360.0;
-        if (difference < 0.0) {
-            difference += 360.0;
-        }
-        return difference - 180.0;
+        double predicted = Math.toDegrees(Math.atan2(-(prediction.targetX() - measurement.x), prediction.targetZ() - measurement.z));
+        return StrongholdOverlay.wrapYaw(predicted - (double)measurement.yaw);
     }
 
     private static int percentColor(double percent) {
-        if (percent >= 50.0) {
-            return 6014059;
+        if (percent >= PERCENT_HIGH) {
+            return COLOR_HIGH;
         }
-        if (percent >= 5.0) {
-            return 14723132;
+        if (percent >= PERCENT_MEDIUM) {
+            return COLOR_MEDIUM;
         }
-        return 12733002;
+        return COLOR_LOW;
     }
 
-    private static int errorColor(double error) {
+    /** Green within one aim error, amber within three, red beyond. */
+    private static int errorColor(double error, double sigma) {
         double magnitude = Math.abs(error);
-        if (magnitude <= 0.01) {
-            return 6014059;
+        if (magnitude <= sigma) {
+            return COLOR_HIGH;
         }
-        if (magnitude <= 0.05) {
-            return 14723132;
+        if (magnitude <= 3.0 * sigma) {
+            return COLOR_MEDIUM;
         }
-        return 12733002;
+        return COLOR_LOW;
     }
 
     private static void fill(MatrixStack matrices, int x1, int y1, int x2, int y2, int rgb) {
-        DrawableHelper.fill(matrices, (int)x1, (int)y1, (int)x2, (int)y2, (int)StrongholdConfig.applyOpacity(rgb));
+        DrawableHelper.fill(matrices, x1, y1, x2, y2, StrongholdConfig.applyOpacity(rgb));
     }
 
     private static void roundedRect(MatrixStack matrices, int left, int top, int right, int bottom, int rgb) {
@@ -638,22 +721,25 @@ public final class StrongholdOverlay {
         return wrapped - 180.0;
     }
 
+    private static String signed(int value) {
+        return (value >= 0 ? "+" : "") + value;
+    }
+
     private static String decimals(double value, int places) {
-        boolean negative;
         long scale = 1L;
         for (int i = 0; i < places; ++i) {
             scale *= 10L;
         }
         long scaled = Math.round(value * (double)scale);
-        boolean bl = negative = scaled < 0L;
+        boolean negative = scaled < 0L;
         if (negative) {
             scaled = -scaled;
         }
-        Object fraction = Long.toString(scaled % scale);
-        while (((String)fraction).length() < places) {
-            fraction = "0" + (String)fraction;
+        String fraction = Long.toString(scaled % scale);
+        while (fraction.length() < places) {
+            fraction = "0" + fraction;
         }
-        String text = scaled / scale + "." + (String)fraction;
+        String text = places == 0 ? Long.toString(scaled / scale) : scaled / scale + "." + fraction;
         return negative ? "-" + text : text;
     }
 
@@ -661,4 +747,3 @@ public final class StrongholdOverlay {
         return CALCULATOR.name();
     }
 }
-

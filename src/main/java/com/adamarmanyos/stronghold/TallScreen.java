@@ -18,7 +18,21 @@ public final class TallScreen {
         return tall;
     }
 
+    /**
+     * With Toolscreen Mobile installed, switches its Eye Measure mode instead.
+     * On iOS this is the only thing that works: Amethyst's glfwSetWindowSize
+     * only records the numbers and never resizes anything.
+     */
     public static void toggle(MinecraftClient client) {
+        if (ToolscreenBridge.present()) {
+            boolean on = !ToolscreenBridge.isEyeMeasureActive();
+            if (ToolscreenBridge.setEyeMeasure(on)) {
+                StrongholdOverlay.notice(on ? "Eye Measure on" : "Eye Measure off");
+            } else {
+                StrongholdOverlay.notice("Toolscreen has no Eye Measure mode");
+            }
+            return;
+        }
         if (client.options.fullscreen) {
             StrongholdOverlay.notice("Leave fullscreen first");
             return;

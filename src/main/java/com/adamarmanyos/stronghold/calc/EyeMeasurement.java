@@ -6,9 +6,16 @@ public final class EyeMeasurement {
     public float yaw;
     public final double sigma;
     public final boolean fromEyeFlight;
+    /** A boat-eye throw: measured zoomed in, trusted to the boat-eye aim error. */
     public boolean fromBoat;
     public float pitch;
     public int pixelAdjustments;
+    /**
+     * Yaw change for one pixel of adjustment, fixed when the throw is taken.
+     * Leaving Eye Measure afterwards changes the pixel size on screen, but
+     * the pixels being counted are the ones the throw was lined up in.
+     */
+    public double yawPerPixel;
 
     public EyeMeasurement(double x, double z, float yaw, double sigma, boolean fromEyeFlight) {
         this.x = x;
